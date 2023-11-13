@@ -1,9 +1,15 @@
 from django.shortcuts import render, redirect
 from django.http import HttpResponseRedirect
 from django.contrib.auth.decorators import login_required
+from django.http import Http404
 
 from .models import Topic, Entry
 from .forms import TopicForm, EntryForm
+
+
+def check_topic_owner(request, topic):
+    if topic.owner != request.user:
+        raise Http404
 
 
 def index(request):
@@ -23,6 +29,7 @@ def topics(request):
 def topic(request, topic_id):
     """Gives one topic and all entries"""
     topic = Topic.objects.get(id=topic_id)
+    check_topic_owner(request, topic)
     entries = topic.entry_set.order_by('-date_added')
     context = {'topic': topic, 'entries': entries}
     return render(request, 'learning_logs/topic.html', context)
@@ -38,7 +45,9 @@ def new_topic(request):
         # Sent data POST; process data
         form = TopicForm(data=request.POST)
         if form.is_valid:
-            form.save()
+            new_topic = form.save(commit=False)
+            new_topic.owner = request.user
+            new_topic.save()
             return HttpResponseRedirect(redirect_to='/topics')
     # Print a blank form or an invalid form
     context = {'form': form}
@@ -49,6 +58,7 @@ def new_topic(request):
 def new_entry(request, topic_id):
     """Adds a new entry on a specific topic"""
     topic = Topic.objects.get(id=topic_id)
+    check_topic_owner(request, topic)
     if request.method != 'POST':
         # Data is not being sent; creates a blank form
         form = EntryForm()
@@ -70,6 +80,7 @@ def edit_entry(request, entry_id):
     """Edits an existing entry"""
     entry = Entry.objects.get(id=entry_id)
     topic = entry.topic
+    check_topic_owner(request, topic)
     if request.method != 'POST':
         # Initial query; the form is filled with data of te current entry
         form = EntryForm(instance=entry)
